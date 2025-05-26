@@ -1,6 +1,7 @@
 // components/ClienteForm.js
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
+import '../assets/styles/ClienteForm.css'
 
 const ClienteForm = ({ cliente, onGuardar, onCancelar }) => {
   const [formData, setFormData] = useState({
@@ -11,6 +12,7 @@ const ClienteForm = ({ cliente, onGuardar, onCancelar }) => {
   });
   
   const [errors, setErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (cliente) {
@@ -25,7 +27,6 @@ const ClienteForm = ({ cliente, onGuardar, onCancelar }) => {
   }, [cliente]);
 
   const validarClave = (clave) => {
-    // Validar que la clave solo contiene números
     if (!/^\d+$/.test(clave)) {
       return 'La clave debe contener únicamente números';
     }
@@ -33,7 +34,6 @@ const ClienteForm = ({ cliente, onGuardar, onCancelar }) => {
   };
 
   const validarNombre = (nombre) => {
-    // Validar que el nombre no contiene números
     if (/\d/.test(nombre)) {
       return 'El nombre no debe contener números';
     }
@@ -44,25 +44,20 @@ const ClienteForm = ({ cliente, onGuardar, onCancelar }) => {
   };
 
   const validarCorreo = (correo) => {
-    // Validar formato básico de correo
     if (!correo.trim()) {
       return 'El correo es requerido';
     }
     
-    // Expresión regular para validar correo electrónico
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(correo)) {
       return 'Formato de correo inválido';
     }
     
-    // Dominios conocidos (extensión simplificada)
     const dominiosConocidos = ['gmail.com', 'hotmail.com', 'outlook.com', 'yahoo.com', 'live.com', 'icloud.com', 'aol.com', 'protonmail.com', 'zoho.com', 'mail.com'];
     const dominio = correo.split('@')[1].toLowerCase();
     
-    // Verificar si es dominio empresarial (con al menos un punto después del @)
     const esDominioPersonalizado = dominio.includes('.');
     
-    // Si no es un dominio conocido ni un dominio empresarial personalizado
     if (!dominiosConocidos.includes(dominio) && (!esDominioPersonalizado || dominio.split('.')[1].length < 2)) {
       return 'Por favor utiliza un servicio de correo conocido';
     }
@@ -71,16 +66,26 @@ const ClienteForm = ({ cliente, onGuardar, onCancelar }) => {
   };
 
   const validarTelefono = (telefono) => {
-    // Eliminar cualquier caracter que no sea número para la validación
     const numeroLimpio = telefono.replace(/\D/g, '');
     
-    // Validar que solo contiene números y tiene exactamente 10 dígitos
     if (!/^\d+$/.test(numeroLimpio)) {
       return 'El teléfono debe contener únicamente números';
     }
     
+    if (numeroLimpio.length < 10) {
+      return 'El teléfono debe tener al menos 10 dígitos incluyendo lada';
+    }
+
+    // Códigos de área de Chiapas
+    const codigosChiapas = ['961', '962', '963', '964', '965', '966', '967', '968', '992', '994'];
+    const codigoArea = numeroLimpio.substring(0, 3);
+    
+    if (!codigosChiapas.includes(codigoArea)) {
+      return 'El teléfono debe ser de Chiapas con códigos válidos: 961, 962, 963, 964, 965, 966, 967, 968, 992, 994';
+    }
+    
     if (numeroLimpio.length !== 10) {
-      return 'El teléfono debe tener 10 dígitos incluyendo lada';
+      return 'El teléfono debe tener exactamente 10 dígitos (3 de lada + 7 del número local)';
     }
     
     return '';
@@ -90,7 +95,6 @@ const ClienteForm = ({ cliente, onGuardar, onCancelar }) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
     
-    // Validar en tiempo real
     let error = '';
     
     switch (name) {
@@ -113,10 +117,10 @@ const ClienteForm = ({ cliente, onGuardar, onCancelar }) => {
     setErrors({ ...errors, [name]: error });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setIsSubmitting(true);
     
-    // Validar todos los campos antes de enviar
     const nuevoErrors = {
       clave: validarClave(formData.clave),
       nombreContacto: validarNombre(formData.nombreContacto),
@@ -126,85 +130,230 @@ const ClienteForm = ({ cliente, onGuardar, onCancelar }) => {
     
     setErrors(nuevoErrors);
     
-    // Verificar si hay errores
     const hayErrores = Object.values(nuevoErrors).some(error => error !== '');
     
     if (!hayErrores) {
-      onGuardar(formData);
+      try {
+        await onGuardar(formData);
+      } finally {
+        setIsSubmitting(false);
+      }
     } else {
       toast.error('Por favor corrija los errores en el formulario');
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit}>
-      <div className="mb-3">
-        <label htmlFor="clave" className="form-label">Clave Cliente</label>
-        <input
-          type="text"
-          className={`form-control ${errors.clave ? 'is-invalid' : ''}`}
-          id="clave"
-          name="clave"
-          value={formData.clave}
-          onChange={handleChange}
-          disabled={formData.id} // Deshabilitar edición de clave si es actualización
-          required
-        />
-        {errors.clave && <div className="invalid-feedback">{errors.clave}</div>}
-        <small className="form-text text-muted">Solo se aceptan números.</small>
-      </div>
-      
-      <div className="mb-3">
-        <label htmlFor="nombreContacto" className="form-label">Nombre de Contacto</label>
-        <input
-          type="text"
-          className={`form-control ${errors.nombreContacto ? 'is-invalid' : ''}`}
-          id="nombreContacto"
-          name="nombreContacto"
-          value={formData.nombreContacto}
-          onChange={handleChange}
-          required
-        />
-        {errors.nombreContacto && <div className="invalid-feedback">{errors.nombreContacto}</div>}
-        <small className="form-text text-muted">No debe contener números.</small>
-      </div>
-      
-      <div className="mb-3">
-        <label htmlFor="correo" className="form-label">Correo Electrónico</label>
-        <input
-          type="email"
-          className={`form-control ${errors.correo ? 'is-invalid' : ''}`}
-          id="correo"
-          name="correo"
-          value={formData.correo}
-          onChange={handleChange}
-          required
-        />
-        {errors.correo && <div className="invalid-feedback">{errors.correo}</div>}
-        <small className="form-text text-muted">Use un proveedor de correo conocido.</small>
-      </div>
-      
-      <div className="mb-3">
-        <label htmlFor="telefonoContacto" className="form-label">Teléfono de Contacto</label>
-        <input
-          type="tel"
-          className={`form-control ${errors.telefonoContacto ? 'is-invalid' : ''}`}
-          id="telefonoContacto"
-          name="telefonoContacto"
-          value={formData.telefonoContacto}
-          onChange={handleChange}
-          placeholder="10 dígitos incluyendo lada"
-          required
-        />
-        {errors.telefonoContacto && <div className="invalid-feedback">{errors.telefonoContacto}</div>}
-        <small className="form-text text-muted">Solo números, 10 dígitos incluyendo lada.</small>
-      </div>
-      
-      <div className="d-flex justify-content-end">
-        <button type="button" className="btn btn-secondary me-2" onClick={onCancelar}>Cancelar</button>
-        <button type="submit" className="btn btn-primary">Guardar</button>
-      </div>
-    </form>
+    <div className="modern-form-container">
+      <form onSubmit={handleSubmit} className="modern-form">
+        {/* Campo Clave */}
+        <div className="form-group">
+          <div className="input-container">
+            <label htmlFor="clave" className="form-label">
+              <i className="bi bi-key-fill label-icon"></i>
+              Clave Cliente
+            </label>
+            <div className="input-wrapper">
+              <input
+                type="text"
+                className={`form-input ${errors.clave ? 'error' : ''} ${formData.clave ? 'filled' : ''}`}
+                id="clave"
+                name="clave"
+                value={formData.clave}
+                onChange={handleChange}
+                disabled={formData.id}
+                required
+                placeholder="Ingrese la clave del cliente"
+              />
+              <div className="input-border"></div>
+              {formData.id && (
+                <div className="locked-indicator">
+                  <i className="bi bi-lock-fill" title="No se puede editar"></i>
+                </div>
+              )}
+            </div>
+            {errors.clave && (
+              <div className="error-message">
+                <i className="bi bi-exclamation-circle"></i>
+                {errors.clave}
+              </div>
+            )}
+            <div className="form-hint tooltip-container">
+              <i className="bi bi-info-circle"></i>
+              Solo se aceptan números
+              <div className="tooltip">
+                <strong>Formato de Clave:</strong><br/>
+                • Solo números permitidos (0-9)<br/>
+                • Sin letras, espacios o símbolos<br/>
+                • Ejemplo: 12345, 001, 9876
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Campo Nombre */}
+        <div className="form-group">
+          <div className="input-container">
+            <label htmlFor="nombreContacto" className="form-label">
+              <i className="bi bi-person-fill label-icon"></i>
+              Nombre de Contacto
+            </label>
+            <div className="input-wrapper">
+              <input
+                type="text"
+                className={`form-input ${errors.nombreContacto ? 'error' : ''} ${formData.nombreContacto ? 'filled' : ''}`}
+                id="nombreContacto"
+                name="nombreContacto"
+                value={formData.nombreContacto}
+                onChange={handleChange}
+                required
+                placeholder="Ingrese el nombre completo"
+              />
+              <div className="input-border"></div>
+            </div>
+            {errors.nombreContacto && (
+              <div className="error-message">
+                <i className="bi bi-exclamation-circle"></i>
+                {errors.nombreContacto}
+              </div>
+            )}
+            <div className="form-hint tooltip-container">
+              <i className="bi bi-info-circle"></i>
+              No debe contener números
+              <div className="tooltip">
+                <strong>Formato de Nombre:</strong><br/>
+                • Solo letras y espacios<br/>
+                • Sin números (0-9)<br/>
+                • Acentos permitidos<br/>
+                • Ejemplo: Juan Pérez, María García
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Campo Correo */}
+        <div className="form-group">
+          <div className="input-container">
+            <label htmlFor="correo" className="form-label">
+              <i className="bi bi-envelope-fill label-icon"></i>
+              Correo Electrónico
+            </label>
+            <div className="input-wrapper">
+              <input
+                type="email"
+                className={`form-input ${errors.correo ? 'error' : ''} ${formData.correo ? 'filled' : ''}`}
+                id="correo"
+                name="correo"
+                value={formData.correo}
+                onChange={handleChange}
+                required
+                placeholder="ejemplo@correo.com"
+              />
+              <div className="input-border"></div>
+            </div>
+            {errors.correo && (
+              <div className="error-message">
+                <i className="bi bi-exclamation-circle"></i>
+                {errors.correo}
+              </div>
+            )}
+            <div className="form-hint tooltip-container">
+              <i className="bi bi-info-circle"></i>
+              Use un proveedor de correo conocido
+              <div className="tooltip">
+                <strong>Proveedores Aceptados:</strong><br/>
+                • gmail.com<br/>
+                • hotmail.com, outlook.com<br/>
+                • yahoo.com, live.com<br/>
+                • icloud.com, aol.com<br/>
+                • protonmail.com, zoho.com<br/>
+                • mail.com<br/>
+                • También dominios empresariales válidos
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Campo Teléfono */}
+        <div className="form-group">
+          <div className="input-container">
+            <label htmlFor="telefonoContacto" className="form-label">
+              <i className="bi bi-telephone-fill label-icon"></i>
+              Teléfono de Contacto
+            </label>
+            <div className="input-wrapper">
+              <input
+                type="tel"
+                className={`form-input ${errors.telefonoContacto ? 'error' : ''} ${formData.telefonoContacto ? 'filled' : ''}`}
+                id="telefonoContacto"
+                name="telefonoContacto"
+                value={formData.telefonoContacto}
+                onChange={handleChange}
+                required
+                placeholder="9611234567"
+              />
+              <div className="input-border"></div>
+            </div>
+            {errors.telefonoContacto && (
+              <div className="error-message">
+                <i className="bi bi-exclamation-circle"></i>
+                {errors.telefonoContacto}
+              </div>
+            )}
+            <div className="form-hint tooltip-container">
+              <i className="bi bi-info-circle"></i>
+              Solo números de Chiapas (10 dígitos)
+              <div className="tooltip">
+                <strong>Códigos de Área de Chiapas:</strong><br/>
+                • 961 - Tuxtla Gutiérrez<br/>
+                • 962 - San Cristóbal de las Casas, Comitán<br/>
+                • 963 - Tapachula<br/>
+                • 964 - Palenque<br/>
+                • 965 - Tonalá<br/>
+                • 966 - Arriaga, Pijijiapan<br/>
+                • 967 - Las Margaritas, Altamirano<br/>
+                • 968 - Villaflores, Villa Corzo<br/>
+                • 992 - Reforma<br/>
+                • 994 - Mapastepec<br/>
+                <strong>Formato:</strong> 3 dígitos de lada + 7 dígitos locales
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Botones de acción */}
+        <div className="form-actions">
+          <button 
+            type="button" 
+            className="btn-secondary" 
+            onClick={onCancelar}
+            disabled={isSubmitting}
+          >
+            <i className="bi bi-x-circle"></i>
+            <span>Cancelar</span>
+          </button>
+          
+          <button 
+            type="submit" 
+            className="btn-primary"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? (
+              <>
+                <div className="spinner"></div>
+                <span>Guardando...</span>
+              </>
+            ) : (
+              <>
+                <i className="bi bi-check-circle"></i>
+                <span>Guardar</span>
+              </>
+            )}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 };
 
