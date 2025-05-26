@@ -1,142 +1,94 @@
-// App.js
-import React, { useState, useEffect } from 'react';
+// App.js - Versión Corregida
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import './App.css';
 import ClienteForm from './components/ClienteForm';
 import ClientesList from './components/ClientesList';
-import ClientesConErrores from './components/ClientesConErrores';
 import SearchBar from './components/SearchBar';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
 function App() {
-  const [clientes, setClientes] = useState([]);
+  const [clientes, setClientes] = useState([]); // Todos los clientes
+  const [filtrados, setFiltrados] = useState([]); // Clientes filtrados - inicializar como array vacío
   const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
-  const [filtrados, setFiltrados] = useState([]);
   const [busqueda, setBusqueda] = useState('');
-  const [vistaActual, setVistaActual] = useState('todos'); // 'todos', 'errores'
-  const [clientesConErrores, setClientesConErrores] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [paginaActual, setPaginaActual] = useState(1);
+  const [clientesPorPagina] = useState(50); // Paginación para mejor rendimiento
 
   useEffect(() => {
-    cargarClientes();
+    cargarClientesConValidacion();
   }, []);
 
-  const cargarClientes = async () => {
+  const cargarClientesConValidacion = async (signal) => {
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8080/clientes');
+      const response = await fetch('http://localhost:8080/clientes/validacion/todos', {
+        signal // Soporte para cancelación
+      });
+      
       if (response.ok) {
         const data = await response.json();
-        setClientes(data);
-        if (vistaActual === 'todos') {
-          setFiltrados(data);
-        }
-      } else {
-        toast.error('Error al cargar clientes');
-      }
-    } catch (error) {
-      toast.error(`Error de conexión: ${error.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const cargarClientesConValidacion = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch('http://localhost:8080/clientes/validacion/todos');
-      if (response.ok) {
-        const data = await response.json();
-        setFiltrados(data);
+        // Asegurar que data sea un array
+        const clientesData = Array.isArray(data) ? data : [];
+        setClientes(clientesData);
+        setFiltrados(clientesData);
+        setPaginaActual(1); // Reset pagination
       } else {
         toast.error('Error al cargar clientes con validación');
+        // Establecer arrays vacíos en caso de error
+        setClientes([]);
+        setFiltrados([]);
       }
     } catch (error) {
-      toast.error(`Error de conexión: ${error.message}`);
+      if (error.name !== 'AbortError') {
+        toast.error(`Error de conexión: ${error.message}`);
+        // Establecer arrays vacíos en caso de error
+        setClientes([]);
+        setFiltrados([]);
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const cargarClientesConErrores = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch('http://localhost:8080/clientes/validacion/errores');
-      if (response.ok) {
-        const data = await response.json();
-        setClientesConErrores(data);
-        setFiltrados(data);
-      } else {
-        toast.error('Error al cargar clientes con errores');
-      }
-    } catch (error) {
-      toast.error(`Error de conexión: ${error.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSearch = async (termino) => {
+  // Búsqueda optimizada con soporte para cancelación
+  const handleSearch = useCallback(async (termino, signal) => {
     setBusqueda(termino);
+    
     if (termino.trim() === '') {
-      if (vistaActual === 'todos') {
-        setFiltrados(clientes);
-      } else if (vistaActual === 'errores') {
-        setFiltrados(clientesConErrores);
-      } else if (vistaActual === 'validacion') {
-        cargarClientesConValidacion();
-      }
+      setFiltrados(clientes);
+      setPaginaActual(1);
       return;
     }
     
     setLoading(true);
     try {
-      let url;
-      if (vistaActual === 'validacion' || vistaActual === 'errores') {
-        url = `http://localhost:8080/clientes/validacion/buscar?q=${encodeURIComponent(termino)}`;
-      } else {
-        url = `http://localhost:8080/clientes/buscar?q=${encodeURIComponent(termino)}`;
-      }
+      const url = `http://localhost:8080/clientes/validacion/buscar?q=${encodeURIComponent(termino)}`;
       
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        signal // Soporte para cancelación
+      });
+      
       if (response.ok) {
         const data = await response.json();
-        
-        if (vistaActual === 'errores') {
-          // Filtrar solo los que tienen errores
-          const soloConErrores = data.filter(item => item.tieneErrores);
-          setFiltrados(soloConErrores);
-        } else {
-          setFiltrados(data);
-        }
+        // Asegurar que data sea un array
+        const resultados = Array.isArray(data) ? data : [];
+        setFiltrados(resultados);
+        setPaginaActual(1); // Reset pagination
       } else {
         toast.error('Error en la búsqueda');
+        setFiltrados([]); // Establecer array vacío en caso de error
       }
     } catch (error) {
-      toast.error(`Error de conexión: ${error.message}`);
+      if (error.name !== 'AbortError') {
+        toast.error(`Error de conexión: ${error.message}`);
+        setFiltrados([]); // Establecer array vacío en caso de error
+      }
     } finally {
       setLoading(false);
     }
-  };
-
-  const cambiarVista = (vista) => {
-    setVistaActual(vista);
-    setBusqueda('');
-    
-    switch(vista) {
-      case 'todos':
-        setFiltrados(clientes);
-        break;
-      case 'validacion':
-        cargarClientesConValidacion();
-        break;
-      case 'errores':
-        cargarClientesConErrores();
-        break;
-      default:
-        setFiltrados(clientes);
-    }
-  };
+  }, [clientes]);
 
   const handleGuardarCliente = async (cliente) => {
     try {
@@ -155,21 +107,12 @@ function App() {
 
       if (response.ok) {
         toast.success(cliente.id ? 'Cliente actualizado con éxito' : 'Cliente creado con éxito');
-        await cargarClientes();
-        
-        // Recargar la vista actual
-        if (vistaActual === 'validacion') {
-          cargarClientesConValidacion();
-        } else if (vistaActual === 'errores') {
-          cargarClientesConErrores();
-        }
-        
+        await cargarClientesConValidacion();
         setClienteSeleccionado(null);
       } else {
         const errorData = await response.json();
         if (errorData.errores) {
           toast.error('Errores de validación encontrados');
-          // Mostrar errores específicos
           errorData.errores.forEach(error => {
             toast.error(`${error.campo}: ${error.mensaje}`);
           });
@@ -183,9 +126,9 @@ function App() {
     }
   };
 
-  const handleEditarCliente = (cliente) => {
+  const handleEditarCliente = useCallback((cliente) => {
     setClienteSeleccionado({...cliente, id: true});
-  };
+  }, []);
 
   const handleEliminarCliente = async (clave) => {
     if (window.confirm('¿Está seguro de eliminar este cliente?')) {
@@ -196,14 +139,7 @@ function App() {
 
         if (response.ok) {
           toast.success('Cliente eliminado con éxito');
-          await cargarClientes();
-          
-          // Recargar la vista actual
-          if (vistaActual === 'validacion') {
-            cargarClientesConValidacion();
-          } else if (vistaActual === 'errores') {
-            cargarClientesConErrores();
-          }
+          await cargarClientesConValidacion();
         } else {
           const error = await response.text();
           toast.error(`Error: ${error}`);
@@ -214,48 +150,82 @@ function App() {
     }
   };
 
-  const handleNuevoCliente = () => {
+  const handleNuevoCliente = useCallback(() => {
     setClienteSeleccionado({
       clave: '',
       nombreContacto: '',
       correo: '',
       telefonoContacto: ''
     });
-  };
+  }, []);
 
-  const handleCancelar = () => {
+  const handleCancelar = useCallback(() => {
     setClienteSeleccionado(null);
-  };
+  }, []);
 
-  const contarClientesConErrores = () => {
-    return filtrados.filter(item => item.tieneErrores).length;
+  // Memoización de estadísticas con validación de null/undefined
+  const estadisticas = useMemo(() => {
+    // Validar que filtrados sea un array válido
+    if (!Array.isArray(filtrados)) {
+      return { total: 0, conErrores: 0, validos: 0 };
+    }
+    
+    const total = filtrados.length;
+    const conErrores = filtrados.filter(item => item && item.tieneErrores).length;
+    const validos = total - conErrores;
+    
+    return { total, conErrores, validos };
+  }, [filtrados]);
+
+  // Paginación con validación de array
+  const clientesPaginados = useMemo(() => {
+    // Validar que filtrados sea un array válido
+    if (!Array.isArray(filtrados)) {
+      return [];
+    }
+    
+    const inicio = (paginaActual - 1) * clientesPorPagina;
+    const fin = inicio + clientesPorPagina;
+    return filtrados.slice(inicio, fin);
+  }, [filtrados, paginaActual, clientesPorPagina]);
+
+  // Validar que filtrados sea un array antes de calcular páginas
+  const totalPaginas = Array.isArray(filtrados) 
+    ? Math.ceil(filtrados.length / clientesPorPagina) 
+    : 0;
+
+  const handleCambiarPagina = (nuevaPagina) => {
+    setPaginaActual(nuevaPagina);
+    // Scroll suave hacia arriba
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
     <div className="App">
-      {/* Bootstrap Icons y Custom CSS */}
       <link 
         href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" 
         rel="stylesheet"
       />
       
-      {/* Header mejorado */}
+      {/* Header optimizado */}
       <header className="app-header">
         <div className="header-background"></div>
         <div className="container">
           <div className="row align-items-center">
             <div className="col-md-8">
               <h1 className="header-title">
-                <i className="bi bi-people-fill me-3"></i>
-                Sistema de Gestión de Clientes
+                <i className="bi bi-shield-check me-3"></i>
+                Sistema de Validación de Clientes
               </h1>
               <p className="header-subtitle">Administra y valida tu base de datos de clientes</p>
             </div>
             <div className="col-md-4 text-end">
               <div className="header-stats">
                 <div className="stat-item">
-                  <span className="stat-number">{clientes.length}</span>
-                  <span className="stat-label">Clientes</span>
+                  <span className="stat-number">{estadisticas.total}</span>
+                  <span className="stat-label">
+                    {busqueda ? 'Encontrados' : 'Clientes'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -265,54 +235,7 @@ function App() {
       
       <main className="app-main">
         <div className="container">
-          {/* Navigation mejorada */}
-          <div className="navigation-section">
-            <div className="nav-buttons">
-              <button 
-                className={`nav-btn ${vistaActual === 'todos' ? 'active' : ''}`}
-                onClick={() => cambiarVista('todos')}
-                disabled={clienteSeleccionado !== null}
-              >
-                <div className="nav-btn-content">
-                  <i className="bi bi-people nav-icon"></i>
-                  <div className="nav-text">
-                    <span className="nav-title">Todos</span>
-                    <span className="nav-count">{clientes.length}</span>
-                  </div>
-                </div>
-              </button>
-              
-              <button 
-                className={`nav-btn ${vistaActual === 'validacion' ? 'active' : ''}`}
-                onClick={() => cambiarVista('validacion')}
-                disabled={clienteSeleccionado !== null}
-              >
-                <div className="nav-btn-content">
-                  <i className="bi bi-shield-check nav-icon"></i>
-                  <div className="nav-text">
-                    <span className="nav-title">Con Validación</span>
-                    <span className="nav-count">Análisis</span>
-                  </div>
-                </div>
-              </button>
-              
-              <button 
-                className={`nav-btn error-btn ${vistaActual === 'errores' ? 'active' : ''}`}
-                onClick={() => cambiarVista('errores')}
-                disabled={clienteSeleccionado !== null}
-              >
-                <div className="nav-btn-content">
-                  <i className="bi bi-exclamation-triangle nav-icon"></i>
-                  <div className="nav-text">
-                    <span className="nav-title">Con Errores</span>
-                    <span className="nav-count">{vistaActual === 'errores' ? filtrados.length : '...'}</span>
-                  </div>
-                </div>
-              </button>
-            </div>
-          </div>
-
-          {/* Barra de acciones mejorada */}
+          {/* Barra de acciones */}
           <div className="actions-section">
             <div className="actions-left">
               <button 
@@ -339,42 +262,42 @@ function App() {
             </div>
           </div>
 
-          {/* Estadísticas mejoradas */}
-          {vistaActual === 'validacion' && (
-            <div className="stats-section">
-              <div className="stats-grid">
-                <div className="stat-card total">
-                  <div className="stat-icon">
-                    <i className="bi bi-people"></i>
-                  </div>
-                  <div className="stat-info">
-                    <span className="stat-title">Total</span>
-                    <span className="stat-value">{filtrados.length}</span>
-                  </div>
+          {/* Estadísticas optimizadas */}
+          <div className="stats-section">
+            <div className="stats-grid">
+              <div className="stat-card total">
+                <div className="stat-icon">
+                  <i className="bi bi-people"></i>
                 </div>
-                
-                <div className="stat-card errors">
-                  <div className="stat-icon">
-                    <i className="bi bi-exclamation-triangle"></i>
-                  </div>
-                  <div className="stat-info">
-                    <span className="stat-title">Con Errores</span>
-                    <span className="stat-value">{contarClientesConErrores()}</span>
-                  </div>
+                <div className="stat-info">
+                  <span className="stat-title">
+                    {busqueda ? 'Encontrados' : 'Total'}
+                  </span>
+                  <span className="stat-value">{estadisticas.total}</span>
                 </div>
-                
-                <div className="stat-card valid">
-                  <div className="stat-icon">
-                    <i className="bi bi-check-circle"></i>
-                  </div>
-                  <div className="stat-info">
-                    <span className="stat-title">Válidos</span>
-                    <span className="stat-value">{filtrados.length - contarClientesConErrores()}</span>
-                  </div>
+              </div>
+              
+              <div className="stat-card errors">
+                <div className="stat-icon">
+                  <i className="bi bi-exclamation-triangle"></i>
+                </div>
+                <div className="stat-info">
+                  <span className="stat-title">Con Errores</span>
+                  <span className="stat-value">{estadisticas.conErrores}</span>
+                </div>
+              </div>
+              
+              <div className="stat-card valid">
+                <div className="stat-icon">
+                  <i className="bi bi-check-circle"></i>
+                </div>
+                <div className="stat-info">
+                  <span className="stat-title">Válidos</span>
+                  <span className="stat-value">{estadisticas.validos}</span>
                 </div>
               </div>
             </div>
-          )}
+          </div>
           
           {/* Contenido principal */}
           <div className="content-section">
@@ -398,19 +321,113 @@ function App() {
               </div>
             ) : (
               <div className="table-container">
-                {vistaActual === 'errores' ? (
-                  <ClientesConErrores 
-                    clientesConErrores={filtrados}
-                    onEditar={handleEditarCliente} 
-                    onEliminar={handleEliminarCliente} 
-                  />
-                ) : (
-                  <ClientesList 
-                    clientes={filtrados} 
-                    onEditar={handleEditarCliente} 
-                    onEliminar={handleEliminarCliente}
-                    mostrarValidacion={vistaActual === 'validacion'}
-                  />
+                {/* Información de paginación */}
+                {totalPaginas > 1 && (
+                  <div className="pagination-info mb-3">
+                    <div className="d-flex justify-content-between align-items-center">
+                      <small className="text-muted">
+                        Mostrando {((paginaActual - 1) * clientesPorPagina) + 1} - {Math.min(paginaActual * clientesPorPagina, estadisticas.total)} de {estadisticas.total} registros
+                      </small>
+                      <div className="pagination-controls">
+                        <button 
+                          className="btn btn-sm btn-outline-primary me-2"
+                          onClick={() => handleCambiarPagina(paginaActual - 1)}
+                          disabled={paginaActual === 1}
+                        >
+                          <i className="bi bi-chevron-left"></i> Anterior
+                        </button>
+                        <span className="pagination-current">
+                          Página {paginaActual} de {totalPaginas}
+                        </span>
+                        <button 
+                          className="btn btn-sm btn-outline-primary ms-2"
+                          onClick={() => handleCambiarPagina(paginaActual + 1)}
+                          disabled={paginaActual === totalPaginas}
+                        >
+                          Siguiente <i className="bi bi-chevron-right"></i>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                <ClientesList 
+                  clientes={clientesPaginados} // Usar clientes paginados
+                  onEditar={handleEditarCliente} 
+                  onEliminar={handleEliminarCliente}
+                  mostrarValidacion={true}
+                />
+                
+                {/* Paginación inferior */}
+                {totalPaginas > 1 && (
+                  <div className="pagination-bottom mt-3">
+                    <nav aria-label="Navegación de páginas">
+                      <ul className="pagination justify-content-center">
+                        <li className={`page-item ${paginaActual === 1 ? 'disabled' : ''}`}>
+                          <button 
+                            className="page-link"
+                            onClick={() => handleCambiarPagina(1)}
+                            disabled={paginaActual === 1}
+                          >
+                            Primera
+                          </button>
+                        </li>
+                        <li className={`page-item ${paginaActual === 1 ? 'disabled' : ''}`}>
+                          <button 
+                            className="page-link"
+                            onClick={() => handleCambiarPagina(paginaActual - 1)}
+                            disabled={paginaActual === 1}
+                          >
+                            Anterior
+                          </button>
+                        </li>
+                        
+                        {/* Páginas numéricas */}
+                        {[...Array(Math.min(5, totalPaginas))].map((_, index) => {
+                          let pageNum;
+                          if (totalPaginas <= 5) {
+                            pageNum = index + 1;
+                          } else if (paginaActual <= 3) {
+                            pageNum = index + 1;
+                          } else if (paginaActual >= totalPaginas - 2) {
+                            pageNum = totalPaginas - 4 + index;
+                          } else {
+                            pageNum = paginaActual - 2 + index;
+                          }
+                          
+                          return (
+                            <li key={pageNum} className={`page-item ${paginaActual === pageNum ? 'active' : ''}`}>
+                              <button 
+                                className="page-link"
+                                onClick={() => handleCambiarPagina(pageNum)}
+                              >
+                                {pageNum}
+                              </button>
+                            </li>
+                          );
+                        })}
+                        
+                        <li className={`page-item ${paginaActual === totalPaginas ? 'disabled' : ''}`}>
+                          <button 
+                            className="page-link"
+                            onClick={() => handleCambiarPagina(paginaActual + 1)}
+                            disabled={paginaActual === totalPaginas}
+                          >
+                            Siguiente
+                          </button>
+                        </li>
+                        <li className={`page-item ${paginaActual === totalPaginas ? 'disabled' : ''}`}>
+                          <button 
+                            className="page-link"
+                            onClick={() => handleCambiarPagina(totalPaginas)}
+                            disabled={paginaActual === totalPaginas}
+                          >
+                            Última
+                          </button>
+                        </li>
+                      </ul>
+                    </nav>
+                  </div>
                 )}
               </div>
             )}
@@ -431,8 +448,6 @@ function App() {
         theme="light"
         toastClassName="custom-toast"
       />
-
-      
     </div>
   );
 }
